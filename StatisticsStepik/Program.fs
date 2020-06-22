@@ -1,11 +1,14 @@
 ﻿open System
 open FSharp.Data
 open FSharp.Collections
+open XPlot.Plotly
+open MathNet.Numerics.Distributions
+
 
 //Выборочное среднее
 let mean (data:float List) =
      let result = data|> List.sum 
-     result/float (List.length data)
+     result/float data.Length
 
 //Выборочная дисперсия
 let sd (data:float List) =
@@ -18,20 +21,21 @@ let sd (data:float List) =
 
 //исправленная дисперсия s^2
 let sd2 (data:float List) =
-    let n = float (List.length data)
-    sd data * n / (n-1.) 
+    let n = float data.Length
+    n*(sd data)/(n-1.)  
 
 //среднее квадратическое отклонение s
 let sdeviation (data:float List)=
-    sqrt(sd2 data)
+    sqrt(sd data)
 
 //Выборочная медиана
-let med (list:float List) =
-         let n = list |> List.length
+let med (data:float List) =
+         let n = data |> List.length
+         let data1 = data |>List.sort
          if n%2=0 then
              let i=n/2
-             (list.[i]+list.[i-1])/2.
-         else list.[(n-1)/2]
+             (data1.[i]+data1.[i-1])/2.
+         else data1.[(int n/2)]
 
 //выборочная мода - это самый частотный элемент в выборке
 let mode (data:float List) =
@@ -76,7 +80,7 @@ let v (data:float List) =
 let nu (r:float) (data:float List) =
     let result = ref 0.
     let mean = mean data
-    let n = float (List.length data)
+    let n = float data.Length
     for item in data do
         result:=!result + (item - mean)**r
 
@@ -100,7 +104,7 @@ let sk1 (data:float List)=
 
 //коэффициент аксцесса
 let k (data:float List)=
-    (nu 4. data)/((sdeviation data)**4.) - 3.
+    (nu 4. data)/((sd data)**2.) - 3.
 
 //интерквантильный разброс
 let iqr (data:float List) =
@@ -112,6 +116,15 @@ let sk2 (data:float List)=
         /iqr data
 
 //ящики с усами центральная линия это выборочная медиана top Q3 bot Q1, borderstop=Q3+1.5IQR bordersbot=Q1-1.5IQR
+
+let showhist chart1 chart2 overlaidLayout =
+    [chart1; chart2]
+    |> Chart.Plot
+    |> Chart.WithLayout overlaidLayout
+    |> Chart.WithWidth 700
+    |> Chart.WithHeight 500
+    |> Chart.Show
+
 
 //относительные частоты попадания элементов выборки в данные интервалы.
 let eval data =
@@ -136,10 +149,13 @@ let eval data =
          elif i <= 21.20 then h := !h+1.
      [!a/n;!b/n;!c/n;!d/n;!e/n;!f/n;!g/n;!h/n;]
 
+
 [<EntryPoint>]
 let main argv =
-
+   //
    let value=[23.; 24.; 21.; 23.; 22.; 21.; 20.; 21.; 28.; 25.; 22.; 22.; 25.; 21.]|>List.sort
+   
+   let a=med value
    let resmode=mode value
    let resmean =mean value
    let ressd = sd value
@@ -147,9 +163,72 @@ let main argv =
    let resquant1=quant 0.75 value
    let data=[(170., 66.); (182., 74.);(183., 77.);(180., 72.);(175., 67.);(181., 77.);(187., 76.);(181., 77.);(178., 72.);(187., 76.)]
    let rescor =cor data
-   let msft = CsvFile.Load("D:\F#\1.txt").Cache()
-   let somelist = [for row in msft.Headers.Value do yield float row]|>List.sort
+   //
+   //eval
+   //let msft = CsvFile.Load("D:\F#\1.txt").Cache()
+   //let somelist = [for row in msft.Headers.Value do yield float row]|>List.sort
+   //
+   let datacsv = CsvFile.Load("D:\F#\1.tsv",hasHeaders=false).Cache()
+   let mutable datares = List.empty
+   for row in datacsv.Rows do 
+            let mutable column = List.empty
+            for item in row.Columns do
+                column <- column @ [item] 
+            datares <- datares @ [column]
+   let mutable sixnum = List.empty
+   let mutable thirxnum = List.empty
+   for item in datares do
+        item |> List.iteri (fun i x -> if i=2 then sixnum<-sixnum @ [float x]
+                                       elif i=3 then thirxnum<-thirxnum @[float x] )
+  
+   let n = sixnum.Length
+   let mutable dif = List.Empty
+   for i in 0..n-1 do
+        dif <- dif @ [thirxnum.[i]-sixnum.[i]] 
+
+
+   let chart1 =
+       Histogram(
+           x = sixnum,
+           opacity = 0.75,
+           name = "6-го числа"
+       )
    
+   let chart2 =
+       Histogram(
+           x = thirxnum,
+           opacity = 0.75,
+           name = "13 числа"
+       )
+
+   let chart3 =
+       Histogram(
+           x = dif,
+           opacity = 0.75,
+           name = "6-го числа"
+       )
+   let overlaidLayout =
+       Layout(
+           barmode = "overlay",
+           title = "Overlaid Histogram"
+       )
+  
+   let points =[|1. .. 50.|]
+   Exponential.Samples(points,0.2) 
+
+   let box1 = Box(y = sixnum,name="6-го числа",boxpoints = "all",
+   jitter = 0.3,pointpos = -1.8)
+   let box2 = Box(y = thirxnum,name = "13-го числа",boxpoints = "all",
+   jitter = 0.3,pointpos = -1.8)
+
+   let box3 = Box(y = dif,name = "111",boxpoints = "all",
+   jitter = 0.3,pointpos = -1.8)
    
+   [box3]
+   |> Chart.Plot
+   |> Chart.WithWidth 700
+   |> Chart.WithHeight 500
+   |> Chart.Show
+
    Console.ReadKey()
    0
